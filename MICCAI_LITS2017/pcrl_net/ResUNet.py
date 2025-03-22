@@ -12,7 +12,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-import parameter as para
+import net.pretrain.PCRLv2.MICCAI_LITS2017.parameter as para
+from utils import config
 
 
 class LUConv(nn.Module):
@@ -20,23 +21,27 @@ class LUConv(nn.Module):
         super(LUConv, self).__init__()
         self.conv1 = nn.Conv3d(in_chan, out_chan, kernel_size=3, padding=1)
 
-        if norm == 'bn':
+        if norm == "bn":
             self.bn1 = nn.BatchNorm3d(num_features=out_chan, momentum=0.1, affine=True)
-        elif norm == 'gn':
-            self.bn1 = nn.GroupNorm(num_groups=8, num_channels=out_chan, eps=1e-05, affine=True)
-        elif norm == 'in':
-            self.bn1 = nn.InstanceNorm3d(num_features=out_chan, momentum=0.1, affine=True)
+        elif norm == "gn":
+            self.bn1 = nn.GroupNorm(
+                num_groups=8, num_channels=out_chan, eps=1e-05, affine=True
+            )
+        elif norm == "in":
+            self.bn1 = nn.InstanceNorm3d(
+                num_features=out_chan, momentum=0.1, affine=True
+            )
         else:
-            raise ValueError('normalization type {} is not supported'.format(norm))
+            raise ValueError("normalization type {} is not supported".format(norm))
 
-        if act == 'relu':
+        if act == "relu":
             self.activation = nn.ReLU(inplace=True)
-        elif act == 'prelu':
+        elif act == "prelu":
             self.activation = nn.PReLU(out_chan)
-        elif act == 'elu':
+        elif act == "elu":
             self.activation = nn.ELU(inplace=True)
         else:
-            raise ValueError('activation type {} is not supported'.format(act))
+            raise ValueError("activation type {} is not supported".format(act))
 
     def forward(self, x):
         out = self.activation(self.bn1(self.conv1(x)))
@@ -48,8 +53,8 @@ def _make_nConv(in_channel, depth, act, norm, double_chnnel=False):
         layer1 = LUConv(in_channel, 32 * (2 ** (depth + 1)), act, norm)
         layer2 = LUConv(32 * (2 ** (depth + 1)), 32 * (2 ** (depth + 1)), act, norm)
     else:
-        layer1 = LUConv(in_channel, 32 * (2 ** depth), act, norm)
-        layer2 = LUConv(32 * (2 ** depth), 32 * (2 ** depth) * 2, act, norm)
+        layer1 = LUConv(in_channel, 32 * (2**depth), act, norm)
+        layer2 = LUConv(32 * (2**depth), 32 * (2**depth) * 2, act, norm)
 
     return nn.Sequential(layer1, layer2)
 
@@ -59,7 +64,9 @@ class UpTransition(nn.Module):
         super(UpTransition, self).__init__()
         self.depth = depth
         self.up_conv = nn.ConvTranspose3d(inChans, outChans, kernel_size=2, stride=2)
-        self.ops = _make_nConv(inChans + outChans // 2, depth, act, norm, double_chnnel=True)
+        self.ops = _make_nConv(
+            inChans + outChans // 2, depth, act, norm, double_chnnel=True
+        )
 
     def forward(self, x, skip_x):
         out_up_conv = self.up_conv(x)
@@ -91,7 +98,7 @@ class DownTransition(nn.Module):
 class UNet3D(nn.Module):
     # the number of convolutions in each layer corresponds
     # to what is in the actual prototxt, not the intent
-    def __init__(self, n_class=1, act='relu', norm='gn', in_channels=1, training=True):
+    def __init__(self, n_class=1, act="relu", norm="gn", in_channels=1, training=True):
         super(UNet3D, self).__init__()
         self.maxpool = nn.MaxPool3d(2)
         # self.conv1 = nn.Conv3d(in_channels, 32, kernel_size=3, stride=2)
@@ -107,28 +114,28 @@ class UNet3D(nn.Module):
         # self.up4 = OutputTransition(64, 32)
         self.map4 = nn.Sequential(
             nn.Conv3d(32, 1, 1, 1),
-            nn.Upsample(scale_factor=(1, 2, 2), mode='trilinear'),
-            nn.Sigmoid()
+            nn.Upsample(scale_factor=(1, 2, 2), mode="trilinear"),
+            nn.Sigmoid(),
         )
         # 128*128 尺度下的映射
         self.map3 = nn.Sequential(
             nn.Conv3d(64, 1, 1, 1),
-            nn.Upsample(scale_factor=(2, 4, 4), mode='trilinear'),
-            nn.Sigmoid()
+            nn.Upsample(scale_factor=(2, 4, 4), mode="trilinear"),
+            nn.Sigmoid(),
         )
 
         # 64*64 尺度下的映射
         self.map2 = nn.Sequential(
             nn.Conv3d(128, 1, 1, 1),
-            nn.Upsample(scale_factor=(4, 8, 8), mode='trilinear'),
-            nn.Sigmoid()
+            nn.Upsample(scale_factor=(4, 8, 8), mode="trilinear"),
+            nn.Sigmoid(),
         )
 
         # 32*32 尺度下的映射
         self.map1 = nn.Sequential(
             nn.Conv3d(256, 1, 1, 1),
-            nn.Upsample(scale_factor=(8, 16, 16), mode='trilinear'),
-            nn.Sigmoid()
+            nn.Upsample(scale_factor=(8, 16, 16), mode="trilinear"),
+            nn.Sigmoid(),
         )
 
     def forward(self, x):
@@ -163,7 +170,7 @@ class UNet3D(nn.Module):
 class UNet3D2(nn.Module):
     # the number of convolutions in each layer corresponds
     # to what is in the actual prototxt, not the intent
-    def __init__(self, n_class=1, act='relu', norm='gn', in_channels=1, training=True):
+    def __init__(self, n_class=1, act="relu", norm="gn", in_channels=1, training=True):
         super(UNet3D2, self).__init__()
         self.maxpool = nn.MaxPool3d(2)
         self.conv1 = nn.Conv3d(in_channels, 32, kernel_size=3, stride=2, padding=1)
@@ -180,48 +187,39 @@ class UNet3D2(nn.Module):
         self.out_tr = OutputTransition(32, n_class)
         self.upsample1 = nn.ConvTranspose3d(64, 32, 2, 2)
         self.relu = nn.ReLU()
-        self.up_conv1 = nn.Sequential(
-            nn.ConvTranspose3d(64, 32, 2, 2),
-            nn.ReLU()
-        )
-        self.up_conv2 = nn.Sequential(
-            nn.ConvTranspose3d(64, 32, 2, 2),
-            nn.ReLU()
-        )
-        self.up_conv3 = nn.Sequential(
-            nn.ConvTranspose3d(64, 32, 2, 2),
-            nn.ReLU()
-        )
+        self.up_conv1 = nn.Sequential(nn.ConvTranspose3d(64, 32, 2, 2), nn.ReLU())
+        self.up_conv2 = nn.Sequential(nn.ConvTranspose3d(64, 32, 2, 2), nn.ReLU())
+        self.up_conv3 = nn.Sequential(nn.ConvTranspose3d(64, 32, 2, 2), nn.ReLU())
         # self.up4 = OutputTransition(64, 32)
         self.map4 = nn.Sequential(
             nn.Conv3d(32, 1, 1, 1),
-            nn.Upsample(scale_factor=(1, 2, 2), mode='trilinear'),
-            nn.Sigmoid()
+            nn.Upsample(scale_factor=(1, 2, 2), mode="trilinear"),
+            nn.Sigmoid(),
         )
         # 128*128 尺度下的映射
         self.map3 = nn.Sequential(
             nn.Conv3d(128, 1, 1, 1),
-            nn.Upsample(scale_factor=(8, 16, 16), mode='trilinear'),
-            nn.Sigmoid()
+            nn.Upsample(scale_factor=(8, 16, 16), mode="trilinear"),
+            nn.Sigmoid(),
         )
 
         # 64*64 尺度下的映射
         self.map2 = nn.Sequential(
             nn.Conv3d(256, 1, 1, 1),
-            nn.Upsample(scale_factor=(16, 32, 32), mode='trilinear'),
-            nn.Sigmoid()
+            nn.Upsample(scale_factor=(16, 32, 32), mode="trilinear"),
+            nn.Sigmoid(),
         )
 
         # 32*32 尺度下的映射
         self.map1 = nn.Sequential(
             nn.Conv3d(64, 1, 1, 1),
-            nn.Upsample(scale_factor=(2, 4, 4), mode='trilinear'),
-            nn.Sigmoid()
+            nn.Upsample(scale_factor=(2, 4, 4), mode="trilinear"),
+            nn.Sigmoid(),
         )
         self.map5 = nn.Sequential(
             nn.Conv3d(64, 1, 1, 1),
-            nn.Upsample(scale_factor=(4, 8, 8), mode='trilinear'),
-            nn.Sigmoid()
+            nn.Upsample(scale_factor=(4, 8, 8), mode="trilinear"),
+            nn.Sigmoid(),
         )
 
     def forward(self, x):
@@ -269,7 +267,7 @@ class UNet3D2(nn.Module):
 class UNet3D3(nn.Module):
     # the number of convolutions in each layer corresponds
     # to what is in the actual prototxt, not the intent
-    def __init__(self, n_class=1, act='relu', norm='gn', in_channels=1, training=True):
+    def __init__(self, n_class=1, act="relu", norm="gn", in_channels=1, training=True):
         super(UNet3D3, self).__init__()
         self.maxpool = nn.MaxPool3d(2)
         self.conv1 = nn.Conv3d(in_channels, 32, kernel_size=3, stride=2, padding=1)
@@ -284,52 +282,54 @@ class UNet3D3(nn.Module):
         self.up_tr64 = UpTransition(128, 128, 0, act, norm)
         # self.up_tr32 = UpTransition(64, 64, -1, act, norm)
         self.out_tr = OutputTransition(32, n_class)
-        self.upsample1 = nn.Sequential(nn.ConvTranspose3d(32, 32, 2, 2),
-                                       nn.ReLU())
+        self.upsample1 = nn.Sequential(nn.ConvTranspose3d(32, 32, 2, 2), nn.ReLU())
         self.conv2 = nn.Conv3d(64 + 32, 32, kernel_size=3, padding=1)
         # self.relu = nn.ReLU()
         self.up_conv1 = nn.Sequential(
-            nn.ConvTranspose3d(64, 64, 2, 2),
-            nn.ReLU(inplace=True)
+            nn.ConvTranspose3d(64, 64, 2, 2), nn.ReLU(inplace=True)
         )
         self.up_conv2 = nn.Sequential(
-            nn.ConvTranspose3d(64, 32, 2, 2),
-            nn.ReLU(inplace=True)
+            nn.ConvTranspose3d(64, 32, 2, 2), nn.ReLU(inplace=True)
         )
         self.up_conv3 = nn.Sequential(
-            nn.ConvTranspose3d(64, 32, 2, 2),
-            nn.ReLU(inplace=True)
+            nn.ConvTranspose3d(64, 32, 2, 2), nn.ReLU(inplace=True)
         )
         # self.up4 = OutputTransition(64, 32)
         self.map4 = nn.Sequential(
-            nn.Conv3d(32, 1, 1, 1),
-            nn.Upsample(scale_factor=(1, 2, 2), mode='trilinear'),
-            nn.Sigmoid()
+            # nn.Conv3d(32, 1, 1, 1),
+            # nn.Upsample(scale_factor=(1, 2, 2), mode="trilinear"),
+            # nn.Sigmoid(),
+            nn.Upsample(scale_factor=(1, 1, 1), mode="trilinear"),
+            nn.Conv3d(32, 16, 1, 1),
         )
         # 128*128 尺度下的映射
         self.map3 = nn.Sequential(
             nn.Conv3d(128, 1, 1, 1),
-            nn.Upsample(scale_factor=(8, 16, 16), mode='trilinear'),
-            nn.Sigmoid()
+            # nn.Upsample(scale_factor=(8, 16, 16), mode="trilinear"),
+            nn.Upsample(scale_factor=(8, 8, 8), mode="trilinear"),
+            nn.Sigmoid(),
         )
 
         # 64*64 尺度下的映射
         self.map2 = nn.Sequential(
             nn.Conv3d(256, 1, 1, 1),
-            nn.Upsample(scale_factor=(16, 32, 32), mode='trilinear'),
-            nn.Sigmoid()
+            # nn.Upsample(scale_factor=(16, 32, 32), mode="trilinear"),
+            nn.Upsample(scale_factor=(16, 16, 16), mode="trilinear"),
+            nn.Sigmoid(),
         )
 
         # 32*32 尺度下的映射
         self.map1 = nn.Sequential(
             nn.Conv3d(32, 1, 1, 1),
-            nn.Upsample(scale_factor=(2, 4, 4), mode='trilinear'),
-            nn.Sigmoid()
+            # nn.Upsample(scale_factor=(2, 4, 4), mode="trilinear"),
+            nn.Upsample(scale_factor=(2, 2, 2), mode="trilinear"),
+            nn.Sigmoid(),
         )
         self.map5 = nn.Sequential(
             nn.Conv3d(64, 1, 1, 1),
-            nn.Upsample(scale_factor=(4, 8, 8), mode='trilinear'),
-            nn.Sigmoid()
+            # nn.Upsample(scale_factor=(4, 8, 8), mode="trilinear"),
+            nn.Upsample(scale_factor=(4, 4, 4), mode="trilinear"),
+            nn.Sigmoid(),
         )
 
     def forward(self, x):
@@ -372,12 +372,14 @@ class UNet3D3(nn.Module):
         # if training:
         #     return output2, output3, out
         # return out
-        return output2, output3, output4, out
+        # return output2, output3, output4, out
+        return out
+
 
 class UNet3D4(nn.Module):
     # the number of convolutions in each layer corresponds
     # to what is in the actual prototxt, not the intent
-    def __init__(self, n_class=1, act='relu', norm='gn', in_channels=1, training=True):
+    def __init__(self, n_class=1, act="relu", norm="gn", in_channels=1, training=True):
         super(UNet3D4, self).__init__()
         self.maxpool = nn.MaxPool3d(2)
         self.conv1 = nn.Conv3d(in_channels, 32, kernel_size=3, stride=1, padding=1)
@@ -392,52 +394,48 @@ class UNet3D4(nn.Module):
         self.up_tr64 = UpTransition(128, 128, 0, act, norm)
         # self.up_tr32 = UpTransition(64, 64, -1, act, norm)
         self.out_tr = OutputTransition(32, n_class)
-        self.upsample1 = nn.Sequential(nn.ConvTranspose3d(32, 32, 2, 2),
-                                       nn.ReLU())
+        self.upsample1 = nn.Sequential(nn.ConvTranspose3d(32, 32, 2, 2), nn.ReLU())
         self.conv2 = nn.Conv3d(64 + 32, 32, kernel_size=3, padding=1)
         # self.relu = nn.ReLU()
         self.up_conv1 = nn.Sequential(
-            nn.ConvTranspose3d(64, 64, 2, 2),
-            nn.ReLU(inplace=True)
+            nn.ConvTranspose3d(64, 64, 2, 2), nn.ReLU(inplace=True)
         )
         self.up_conv2 = nn.Sequential(
-            nn.ConvTranspose3d(64, 32, 2, 2),
-            nn.ReLU(inplace=True)
+            nn.ConvTranspose3d(64, 32, 2, 2), nn.ReLU(inplace=True)
         )
         self.up_conv3 = nn.Sequential(
-            nn.ConvTranspose3d(64, 32, 2, 2),
-            nn.ReLU(inplace=True)
+            nn.ConvTranspose3d(64, 32, 2, 2), nn.ReLU(inplace=True)
         )
         # self.up4 = OutputTransition(64, 32)
         self.map4 = nn.Sequential(
             nn.Conv3d(32, 1, 1, 1),
-            nn.Upsample(scale_factor=(1, 2, 2), mode='trilinear'),
-            nn.Sigmoid()
+            nn.Upsample(scale_factor=(1, 2, 2), mode="trilinear"),
+            nn.Sigmoid(),
         )
         # 128*128 尺度下的映射
         self.map3 = nn.Sequential(
             nn.Conv3d(128, 1, 1, 1),
-            nn.Upsample(scale_factor=(4, 8, 8), mode='trilinear'),
-            nn.Sigmoid()
+            nn.Upsample(scale_factor=(4, 8, 8), mode="trilinear"),
+            nn.Sigmoid(),
         )
 
         # 64*64 尺度下的映射
         self.map2 = nn.Sequential(
             nn.Conv3d(256, 1, 1, 1),
-            nn.Upsample(scale_factor=(8, 16, 16), mode='trilinear'),
-            nn.Sigmoid()
+            nn.Upsample(scale_factor=(8, 16, 16), mode="trilinear"),
+            nn.Sigmoid(),
         )
 
         # 32*32 尺度下的映射
         self.map1 = nn.Sequential(
             nn.Conv3d(32, 1, 1, 1),
-            nn.Upsample(scale_factor=(2, 4, 4), mode='trilinear'),
-            nn.Sigmoid()
+            nn.Upsample(scale_factor=(2, 4, 4), mode="trilinear"),
+            nn.Sigmoid(),
         )
         self.map5 = nn.Sequential(
             nn.Conv3d(64, 1, 1, 1),
-            nn.Upsample(scale_factor=(2, 4, 4), mode='trilinear'),
-            nn.Sigmoid()
+            nn.Upsample(scale_factor=(2, 4, 4), mode="trilinear"),
+            nn.Sigmoid(),
         )
 
     def forward(self, x):
@@ -482,6 +480,7 @@ class UNet3D4(nn.Module):
         # return out
         return output2, output3, output4, out
 
+
 class ResUNet(nn.Module):
     """
 
@@ -503,10 +502,8 @@ class ResUNet(nn.Module):
         self.encoder_stage2 = nn.Sequential(
             nn.Conv3d(32, 32, 3, 1, padding=1),
             nn.PReLU(32),
-
             nn.Conv3d(32, 32, 3, 1, padding=1),
             nn.PReLU(32),
-
             nn.Conv3d(32, 32, 3, 1, padding=1),
             nn.PReLU(32),
         )
@@ -514,10 +511,8 @@ class ResUNet(nn.Module):
         self.encoder_stage3 = nn.Sequential(
             nn.Conv3d(64, 64, 3, 1, padding=1),
             nn.PReLU(64),
-
             nn.Conv3d(64, 64, 3, 1, padding=2, dilation=2),
             nn.PReLU(64),
-
             nn.Conv3d(64, 64, 3, 1, padding=4, dilation=4),
             nn.PReLU(64),
         )
@@ -525,10 +520,8 @@ class ResUNet(nn.Module):
         self.encoder_stage4 = nn.Sequential(
             nn.Conv3d(128, 128, 3, 1, padding=3, dilation=3),
             nn.PReLU(128),
-
             nn.Conv3d(128, 128, 3, 1, padding=4, dilation=4),
             nn.PReLU(128),
-
             nn.Conv3d(128, 128, 3, 1, padding=5, dilation=5),
             nn.PReLU(128),
         )
@@ -536,10 +529,8 @@ class ResUNet(nn.Module):
         self.decoder_stage1 = nn.Sequential(
             nn.Conv3d(128, 256, 3, 1, padding=1),
             nn.PReLU(256),
-
             nn.Conv3d(256, 256, 3, 1, padding=1),
             nn.PReLU(256),
-
             nn.Conv3d(256, 256, 3, 1, padding=1),
             nn.PReLU(256),
         )
@@ -547,10 +538,8 @@ class ResUNet(nn.Module):
         self.decoder_stage2 = nn.Sequential(
             nn.Conv3d(128 + 64, 128, 3, 1, padding=1),
             nn.PReLU(128),
-
             nn.Conv3d(128, 128, 3, 1, padding=1),
             nn.PReLU(128),
-
             nn.Conv3d(128, 128, 3, 1, padding=1),
             nn.PReLU(128),
         )
@@ -558,10 +547,8 @@ class ResUNet(nn.Module):
         self.decoder_stage3 = nn.Sequential(
             nn.Conv3d(64 + 32, 64, 3, 1, padding=1),
             nn.PReLU(64),
-
             nn.Conv3d(64, 64, 3, 1, padding=1),
             nn.PReLU(64),
-
             nn.Conv3d(64, 64, 3, 1, padding=1),
             nn.PReLU(64),
         )
@@ -569,72 +556,52 @@ class ResUNet(nn.Module):
         self.decoder_stage4 = nn.Sequential(
             nn.Conv3d(32 + 16, 32, 3, 1, padding=1),
             nn.PReLU(32),
-
             nn.Conv3d(32, 32, 3, 1, padding=1),
             nn.PReLU(32),
         )
 
-        self.down_conv1 = nn.Sequential(
-            nn.Conv3d(16, 32, 2, 2),
-            nn.PReLU(32)
-        )
+        self.down_conv1 = nn.Sequential(nn.Conv3d(16, 32, 2, 2), nn.PReLU(32))
 
-        self.down_conv2 = nn.Sequential(
-            nn.Conv3d(32, 64, 2, 2),
-            nn.PReLU(64)
-        )
+        self.down_conv2 = nn.Sequential(nn.Conv3d(32, 64, 2, 2), nn.PReLU(64))
 
-        self.down_conv3 = nn.Sequential(
-            nn.Conv3d(64, 128, 2, 2),
-            nn.PReLU(128)
-        )
+        self.down_conv3 = nn.Sequential(nn.Conv3d(64, 128, 2, 2), nn.PReLU(128))
 
         self.down_conv4 = nn.Sequential(
-            nn.Conv3d(128, 256, 3, 1, padding=1),
-            nn.PReLU(256)
+            nn.Conv3d(128, 256, 3, 1, padding=1), nn.PReLU(256)
         )
 
-        self.up_conv2 = nn.Sequential(
-            nn.ConvTranspose3d(256, 128, 2, 2),
-            nn.PReLU(128)
-        )
+        self.up_conv2 = nn.Sequential(nn.ConvTranspose3d(256, 128, 2, 2), nn.PReLU(128))
 
-        self.up_conv3 = nn.Sequential(
-            nn.ConvTranspose3d(128, 64, 2, 2),
-            nn.PReLU(64)
-        )
+        self.up_conv3 = nn.Sequential(nn.ConvTranspose3d(128, 64, 2, 2), nn.PReLU(64))
 
-        self.up_conv4 = nn.Sequential(
-            nn.ConvTranspose3d(64, 32, 2, 2),
-            nn.PReLU(32)
-        )
+        self.up_conv4 = nn.Sequential(nn.ConvTranspose3d(64, 32, 2, 2), nn.PReLU(32))
 
         # 最后大尺度下的映射（256*256），下面的尺度依次递减
         self.map4 = nn.Sequential(
             nn.Conv3d(32, 1, 1, 1),
-            nn.Upsample(scale_factor=(1, 2, 2), mode='trilinear'),
-            nn.Sigmoid()
+            nn.Upsample(scale_factor=(1, 2, 2), mode="trilinear"),
+            nn.Sigmoid(),
         )
 
         # 128*128 尺度下的映射
         self.map3 = nn.Sequential(
             nn.Conv3d(64, 1, 1, 1),
-            nn.Upsample(scale_factor=(2, 4, 4), mode='trilinear'),
-            nn.Sigmoid()
+            nn.Upsample(scale_factor=(2, 4, 4), mode="trilinear"),
+            nn.Sigmoid(),
         )
 
         # 64*64 尺度下的映射
         self.map2 = nn.Sequential(
             nn.Conv3d(128, 1, 1, 1),
-            nn.Upsample(scale_factor=(4, 8, 8), mode='trilinear'),
-            nn.Sigmoid()
+            nn.Upsample(scale_factor=(4, 8, 8), mode="trilinear"),
+            nn.Sigmoid(),
         )
 
         # 32*32 尺度下的映射
         self.map1 = nn.Sequential(
             nn.Conv3d(256, 1, 1, 1),
-            nn.Upsample(scale_factor=(8, 16, 16), mode='trilinear'),
-            nn.Sigmoid()
+            nn.Upsample(scale_factor=(8, 16, 16), mode="trilinear"),
+            nn.Sigmoid(),
         )
 
     def forward(self, inputs):
@@ -665,21 +632,30 @@ class ResUNet(nn.Module):
 
         short_range6 = self.up_conv2(outputs)
 
-        outputs = self.decoder_stage2(torch.cat([short_range6, long_range3], dim=1)) + short_range6
+        outputs = (
+            self.decoder_stage2(torch.cat([short_range6, long_range3], dim=1))
+            + short_range6
+        )
         outputs = F.dropout(outputs, 0.3, self.training)
 
         output2 = self.map2(outputs)
 
         short_range7 = self.up_conv3(outputs)
 
-        outputs = self.decoder_stage3(torch.cat([short_range7, long_range2], dim=1)) + short_range7
+        outputs = (
+            self.decoder_stage3(torch.cat([short_range7, long_range2], dim=1))
+            + short_range7
+        )
         outputs = F.dropout(outputs, 0.3, self.training)
 
         output3 = self.map3(outputs)
 
         short_range8 = self.up_conv4(outputs)
 
-        outputs = self.decoder_stage4(torch.cat([short_range8, long_range1], dim=1)) + short_range8
+        outputs = (
+            self.decoder_stage4(torch.cat([short_range8, long_range1], dim=1))
+            + short_range8
+        )
 
         output4 = self.map4(outputs)
 
@@ -695,9 +671,8 @@ def init(module):
         nn.init.constant_(module.bias.data, 0)
 
 
-
 # net = ResUNet(training=True)
-net = UNet3D3(training=True)
+net = UNet3D3(training=True, n_class=config.num_classes)
 net.apply(init)
 
-print('net total parameters:', sum(param.numel() for param in net.parameters()))
+print("net total parameters:", sum(param.numel() for param in net.parameters()))
